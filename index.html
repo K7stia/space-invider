@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Space Invaders</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            border: 1px solid #fff;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Адаптація розміру канвасу
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2 - 25;
+            player.y = canvas.height - 60;
+            linpuss.x = canvas.width / 2 - 80;
+            linpuss.y = canvas.height - 100;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', resizeCanvas);
+        resizeCanvas();
+
+        // Стани гри
+        let gameState = 'menu';
+        let score = 0;
+        let lives = 3;
+        let paused = false;
+
+        // Завантаження зображень
+        const playerImg = new Image();
+        playerImg.src = 'player.png'; // 50x50
+
+        const enemyImgs = [
+            new Image(),
+            new Image(),
+            new Image()
+        ];
+        enemyImgs[0].src = 'enemy1.png'; // 40x30
+        enemyImgs[1].src = 'enemy2.png'; // 50x25
+        enemyImgs[2].src = 'enemy3.png'; // 60x40
+
+        const pussImg = new Image();
+        pussImg.src = 'puss.png'; // 550x359 для меню
+
+        const backImg = new Image();
+        backImg.src = 'back.png'; // Фон для всіх екранів
+
+        // Гравець
+        const player = {
+            x: canvas.width / 2 - 25,
+            y: canvas.height - 60,
+            width: 50,
+            height: 50,
+            speed: 5,
+            dx: 0,
+            image: playerImg
+        };
+
+        // Кулі
+        const bullets = [];
+        const enemyBullets = [];
+        const bulletSpeed = 7;
+
+        // Вороги
+        const enemies = [];
+        const enemyTypes = [
+            { width: 40, height: 30, image: enemyImgs[0], speedMod: 1 },
+            { width: 50, height: 25, image: enemyImgs[1], speedMod: 0.8 },
+            { width: 60, height: 40, image: enemyImgs[2], speedMod: 0.6 }
+        ];
+        let enemySpeed = 1;
+        let enemyDirection = 1;
+
+        // Ефекти вибухів
+        const explosions = [];
+
+        // Надпис LINPUSS
+        const linpuss = {
+            x: canvas.width / 2 - 80,
+            y: canvas.height - 100,
+            fullText: "LINPUSS",
+            text: "LINPUSS",
+            fontSize: 40,
+            charWidth: 24
+        };
+
+        // Звуки
+        const shootSound = new Audio('https://freesound.org/data/previews/532/532905_11091768-lq.mp3');
+        const explosionSound = new Audio('https://freesound.org/data/previews/269/269021_5093867-lq.mp3');
+
+        // Ініціалізація ворогів
+        function createEnemies() {
+            enemies.length = 0;
+            for (let row = 0; row < 5; row++) {
+                for (let col = 0; col < 10; col++) {
+                    const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+                    enemies.push({
+                        x: col * (type.width + 10) + 50,
+                        y: row * (type.height + 10) + 50,
+                        width: type.width,
+                        height: type.height,
+                        image: type.image,
+                        speedMod: type.speedMod,
+                        alive: true
+                    });
+                }
+            }
+        }
+
+        // Малювання гравця
+        function drawPlayer() {
+            ctx.drawImage(player.image, player.x, player.y, player.width, player.height);
+        }
+
+        // Малювання куль
+        function drawBullets() {
+            ctx.fillStyle = '#ff0';
+            bullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, 5, 10));
+            ctx.fillStyle = '#f0f';
+            enemyBullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, 5, 10));
+        }
+
+        // Малювання ворогів
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                if (enemy.alive) {
+                    ctx.drawImage(enemy.image, enemy.x, enemy.y, enemy.width, enemy.height);
+                }
+            });
+        }
+
+        // Малювання LINPUSS
+        function drawLinpuss() {
+            ctx.fillStyle = '#fff';
+            ctx.font = `${linpuss.fontSize}px monospace`;
+            ctx.fillText(linpuss.text, linpuss.x, linpuss.y);
+        }
+
+        // Малювання вибухів
+        function drawExplosions() {
+            explosions.forEach((exp, index) => {
+                ctx.fillStyle = `rgba(255, 165, 0, ${1 - exp.frame / 10})`;
+                ctx.fillRect(exp.x, exp.y, 30, 30);
+                exp.frame++;
+                if (exp.frame > 10) explosions.splice(index, 1);
+            });
+        }
+
+        // Ворожа стрільба
+        function enemyShoot() {
+            if (Math.random() < 0.01) {
+                const aliveEnemies = enemies.filter(e => e.alive);
+                if (aliveEnemies.length > 0) {
+                    const shooter = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+                    enemyBullets.push({ x: shooter.x + shooter.width / 2, y: shooter.y + shooter.height });
+                }
+            }
+        }
+
+        // Оновлення позицій
+        function update() {
+            if (gameState !== 'playing') return;
+
+            player.x += player.dx;
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            bullets.forEach((bullet, bIndex) => {
+                bullet.y -= bulletSpeed;
+                if (bullet.y < 0) bullets.splice(bIndex, 1);
+                enemyBullets.forEach((eBullet, eIndex) => {
+                    if (bullet.x < eBullet.x + 5 && bullet.x + 5 > eBullet.x &&
+                        bullet.y < eBullet.y + 10 && bullet.y + 10 > eBullet.y) {
+                        bullets.splice(bIndex, 1);
+                        enemyBullets.splice(eIndex, 1);
+                        explosions.push({ x: eBullet.x, y: eBullet.y, frame: 0 });
+                        explosionSound.play();
+                        score += 5;
+                        return;
+                    }
+                });
+            });
+
+            enemyBullets.forEach((bullet, index) => {
+                bullet.y += 5;
+                if (bullet.y > canvas.height) enemyBullets.splice(index, 1);
+                if (bullet.x > player.x && bullet.x < player.x + player.width &&
+                    bullet.y > player.y && bullet.y < player.y + player.height) {
+                    lives--;
+                    enemyBullets.splice(index, 1);
+                    explosions.push({ x: player.x, y: player.y, frame: 0 });
+                    explosionSound.play();
+                }
+                if (bullet.x > linpuss.x && bullet.x < linpuss.x + linpuss.text.length * linpuss.charWidth &&
+                    bullet.y > linpuss.y - linpuss.fontSize && bullet.y < linpuss.y) {
+                    const hitIndex = Math.floor((bullet.x - linpuss.x) / linpuss.charWidth);
+                    if (hitIndex >= 0 && hitIndex < linpuss.text.length && linpuss.text[hitIndex] !== ' ') {
+                        linpuss.text = linpuss.text.slice(0, hitIndex) + ' ' + linpuss.text.slice(hitIndex + 1);
+                        enemyBullets.splice(index, 1);
+                        explosions.push({ x: bullet.x, y: bullet.y, frame: 0 });
+                        explosionSound.play();
+                    }
+                }
+            });
+
+            let edgeReached = false;
+            enemies.forEach(enemy => {
+                if (enemy.alive) {
+                    enemy.x += enemySpeed * enemyDirection * enemy.speedMod;
+                    if (enemy.x + enemy.width > canvas.width || enemy.x < 0) edgeReached = true;
+                }
+            });
+            if (edgeReached) {
+                enemyDirection *= -1;
+                enemies.forEach(enemy => { if (enemy.alive) enemy.y += 10; });
+            }
+
+            bullets.forEach((bullet, bIndex) => {
+                enemies.forEach((enemy, eIndex) => {
+                    if (enemy.alive &&
+                        bullet.x < enemy.x + enemy.width &&
+                        bullet.x + 5 > enemy.x &&
+                        bullet.y < enemy.y + enemy.height &&
+                        bullet.y + 10 > enemy.y) {
+                        enemy.alive = false;
+                        bullets.splice(bIndex, 1);
+                        score += 10;
+                        explosions.push({ x: enemy.x, y: enemy.y, frame: 0 });
+                        explosionSound.play();
+                    }
+                });
+            });
+
+            enemyShoot();
+
+            if (lives <= 0 || linpuss.text.trim() === '' || enemies.some(e => e.alive && e.y + e.height >= player.y)) {
+                gameState = 'gameover';
+            }
+
+            if (enemies.every(e => !e.alive)) {
+                enemySpeed += 0.5;
+                createEnemies();
+            }
+        }
+
+        // Інтерфейс
+        function drawUI() {
+            const fontSize = Math.min(canvas.width / 20, 40); // Масштабування шрифту
+            ctx.fillStyle = '#fff';
+            ctx.font = `${fontSize * 0.5}px Arial`;
+            ctx.fillText(`Score: ${score}`, 10, fontSize);
+            ctx.fillText(`Lives: ${lives}`, canvas.width - fontSize * 2.5, fontSize);
+
+            if (gameState === 'menu') {
+                ctx.drawImage(pussImg, canvas.width / 2 - canvas.width * 0.275, canvas.height / 2 - canvas.height * 0.1795, canvas.width * 0.55, canvas.height * 0.359);
+                ctx.font = `${fontSize}px Arial`;
+                ctx.fillText('Space Invaders', canvas.width / 2 - fontSize * 3.5, canvas.height / 2 - fontSize * 5.5);
+                ctx.font = `${fontSize * 0.5}px Arial`;
+                ctx.fillText('Tap to Start', canvas.width / 2 - fontSize * 3.5, canvas.height / 2 + fontSize * 5);
+            } else if (gameState === 'gameover') {
+                ctx.font = `${fontSize}px Arial`;
+                ctx.fillText('Game Over!', canvas.width / 2 - fontSize * 2.5, canvas.height / 2 - fontSize * 1.25);
+                ctx.font = `${fontSize * 0.5}px Arial`;
+                ctx.fillText(`Score: ${score}`, canvas.width / 2 - fontSize, canvas.height / 2);
+                ctx.fillText('Tap to Restart', canvas.width / 2 - fontSize * 3.5, canvas.height / 2 + fontSize);
+            } else if (paused) {
+                ctx.font = `${fontSize}px Arial`;
+                ctx.fillText('Paused', canvas.width / 2 - fontSize * 1.5, canvas.height / 2);
+            }
+        }
+
+        // Головний цикл гри
+        function gameLoop() {
+            ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'playing' && !paused) {
+                update();
+                drawPlayer();
+                drawBullets();
+                drawEnemies();
+                drawLinpuss();
+                drawExplosions();
+            }
+            drawUI();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Функція запуску гри
+        function startGame() {
+            if (gameState === 'menu' || gameState === 'gameover') {
+                gameState = 'playing';
+                score = 0;
+                lives = 3;
+                linpuss.text = linpuss.fullText;
+                enemySpeed = 1;
+                createEnemies();
+            }
+        }
+
+        // Управління клавішами (для ПК)
+        document.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && (gameState === 'menu' || gameState === 'gameover')) {
+                startGame();
+            }
+            if (gameState !== 'playing') return;
+
+            if (e.key === 'ArrowLeft') player.dx = -player.speed;
+            if (e.key === 'ArrowRight') player.dx = player.speed;
+            if (e.key === ' ') {
+                bullets.push({ x: player.x + player.width / 2 - 2.5, y: player.y });
+                shootSound.play();
+            }
+            if (e.key === 'p') paused = !paused;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') player.dx = 0;
+        });
+
+        // Сенсорне управління (для мобільних)
+        let touchX = null;
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchX = touch.clientX;
+
+            if (gameState === 'playing' && !paused) {
+                bullets.push({ x: player.x + player.width / 2 - 2.5, y: player.y });
+                shootSound.play();
+            } else {
+                startGame();
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (touchX !== null && gameState === 'playing' && !paused) {
+                const deltaX = touch.clientX - touchX;
+                player.x += deltaX / 5; // Чутливість руху
+                if (player.x < 0) player.x = 0;
+                if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+                touchX = touch.clientX;
+            }
+        });
+
+        canvas.addEventListener('touchend', () => {
+            touchX = null;
+        });
+
+        // Управління кліком миші (для ПК)
+        canvas.addEventListener('click', () => {
+            startGame();
+        });
+
+        // Чекаємо завантаження зображень
+        let imagesLoaded = 0;
+        const totalImages = 6;
+        function imageLoaded() {
+            imagesLoaded++;
+            if (imagesLoaded === totalImages) {
+                gameLoop();
+            }
+        }
+
+        playerImg.onload = imageLoaded;
+        enemyImgs[0].onload = imageLoaded;
+        enemyImgs[1].onload = imageLoaded;
+        enemyImgs[2].onload = imageLoaded;
+        pussImg.onload = imageLoaded;
+        backImg.onload = imageLoaded;
+
+        playerImg.onerror = () => console.error("Помилка завантаження player.png");
+        enemyImgs[0].onerror = () => console.error("Помилка завантаження enemy1.png");
+        enemyImgs[1].onerror = () => console.error("Помилка завантаження enemy2.png");
+        enemyImgs[2].onerror = () => console.error("Помилка завантаження enemy3.png");
+        pussImg.onerror = () => console.error("Помилка завантаження puss.png");
+        backImg.onerror = () => console.error("Помилка завантаження back.png");
+    </script>
+</body>
+
+</html>

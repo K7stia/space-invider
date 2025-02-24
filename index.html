@@ -31,19 +31,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Адаптація розміру канвасу
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            player.x = canvas.width / 2 - 25;
-            player.y = canvas.height - 60;
-            linpuss.x = canvas.width / 2 - 80;
-            linpuss.y = canvas.height - 100;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        window.addEventListener('orientationchange', resizeCanvas);
-        resizeCanvas();
-
         // Стани гри
         let gameState = 'menu';
         let score = 0;
@@ -71,8 +58,8 @@
 
         // Гравець
         const player = {
-            x: canvas.width / 2 - 25,
-            y: canvas.height - 60,
+            x: 0, // Початкове значення, буде оновлено в resizeCanvas
+            y: 0,
             width: 50,
             height: 50,
             speed: 5,
@@ -100,8 +87,8 @@
 
         // Надпис LINPUSS
         const linpuss = {
-            x: canvas.width / 2 - 80,
-            y: canvas.height - 100,
+            x: 0, // Початкове значення, буде оновлено в resizeCanvas
+            y: 0,
             fullText: "LINPUSS",
             text: "LINPUSS",
             fontSize: 40,
@@ -111,6 +98,19 @@
         // Звуки
         const shootSound = new Audio('https://freesound.org/data/previews/532/532905_11091768-lq.mp3');
         const explosionSound = new Audio('https://freesound.org/data/previews/269/269021_5093867-lq.mp3');
+
+        // Адаптація розміру канвасу
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2 - 25;
+            player.y = canvas.height - 60;
+            linpuss.x = canvas.width / 2 - 80;
+            linpuss.y = canvas.height - 100;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', resizeCanvas);
+        resizeCanvas(); // Виклик після оголошення player і linpuss
 
         // Ініціалізація ворогів
         function createEnemies() {

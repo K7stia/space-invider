@@ -63,6 +63,22 @@
             text-align: center;
             margin-top: 10px;
         }
+
+        #loadingScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 20px;
+            border: 1px solid #fff;
+            z-index: 20;
+            font-family: "Silkscreen", serif;
+            font-size: 2em;
+            display: block;
+            /* Спочатку відображаємо, поки завантажується */
+        }
     </style>
 </head>
 
@@ -75,6 +91,7 @@
         </ul>
         <p>Press Enter, Space or Click to return to Menu</p>
     </div>
+    <div id="loadingScreen">Loading...</div>
 
     <!-- Firebase SDK (modular approach) -->
     <script type="module">
@@ -105,7 +122,7 @@
     </script>
 
     <script>
-        let canvas, ctx, leaderboardOverlay, leaderboardList;
+        let canvas, ctx, leaderboardOverlay, leaderboardList, loadingScreen;
         let gameState = 'menu';
         let score = 0;
         let lives = 3;
@@ -143,18 +160,17 @@
         const explosionSound = new Audio('explosion.wav');
 
         document.addEventListener('DOMContentLoaded', () => {
-            console.log("DOM loaded, initializing game...");
             canvas = document.getElementById('gameCanvas');
             if (!canvas) console.error("Canvas element not found!");
             ctx = canvas.getContext('2d');
             if (!ctx) console.error("Canvas context not initialized!");
             leaderboardOverlay = document.getElementById('leaderboardOverlay');
             leaderboardList = document.getElementById('leaderboardList');
+            loadingScreen = document.getElementById('loadingScreen');
 
             async function saveScore() {
                 if (playerName.trim() !== '') {
                     try {
-                        console.log("Saving score for:", playerName, score);
                         await window.addDoc(window.collection(window.db, 'leaderboard'), {
                             name: playerName.trim(),
                             score: score,
@@ -170,7 +186,6 @@
 
             async function getLeaderboard() {
                 try {
-                    console.log("Fetching leaderboard...");
                     const q = window.query(
                         window.collection(window.db, 'leaderboard'),
                         window.where('gamepuss', '==', 'SpInv'),
@@ -179,7 +194,6 @@
                     );
                     const querySnapshot = await window.getDocs(q);
                     const data = querySnapshot.docs.map(doc => doc.data());
-                    console.log("Leaderboard data:", data);
                     return data;
                 } catch (error) {
                     console.error("Error loading leaderboard:", error);
@@ -201,7 +215,6 @@
                 if (player.image && player.image.complete && player.image.naturalHeight > 0) {
                     ctx.drawImage(player.image, player.x, player.y, player.width, player.height);
                 } else {
-                    console.warn("Player image not loaded or broken, using fallback");
                     ctx.fillStyle = '#fff';
                     ctx.fillRect(player.x, player.y, player.width, player.height);
                 }
@@ -215,13 +228,10 @@
             }
 
             function drawEnemies() {
+                // Малюємо тільки живих ворогів і тільки якщо їх зображення доступне
                 enemies.forEach(enemy => {
                     if (enemy.alive && enemy.image && enemy.image.complete && enemy.image.naturalHeight > 0) {
                         ctx.drawImage(enemy.image, enemy.x, enemy.y, enemy.width, enemy.height);
-                    } else {
-                        console.warn("Enemy image not loaded or broken, using fallback");
-                        ctx.fillStyle = '#f00';
-                        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
                     }
                 });
             }
@@ -266,7 +276,7 @@
                             enemyBullets.splice(eIndex, 1);
                             explosions.push({ x: eBullet.x, y: eBullet.y, frame: 0 });
                             const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
-                            newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
+                            newExplosionSound.play().catch(e => console.error("Failed to play explosion sound:", e));
                             score += 5;
                             return;
                         }
@@ -281,7 +291,7 @@
                         enemyBullets.splice(index, 1);
                         explosions.push({ x: player.x, y: player.y, frame: 0 });
                         const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
-                        newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
+                        newExplosionSound.play().catch(e => console.error("Failed to play explosion sound:", e));
                     }
                     if (bullet.x > linpuss.x && bullet.x < linpuss.x + linpuss.text.length * linpuss.charWidth && bullet.y > linpuss.y - linpuss.fontSize && bullet.y < linpuss.y) {
                         const hitIndex = Math.floor((bullet.x - linpuss.x) / linpuss.charWidth);
@@ -290,7 +300,7 @@
                             enemyBullets.splice(index, 1);
                             explosions.push({ x: bullet.x, y: bullet.y, frame: 0 });
                             const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
-                            newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
+                            newExplosionSound.play().catch(e => console.error("Failed to play explosion sound:", e));
                         }
                     }
                 });
@@ -315,7 +325,7 @@
                             score += 10;
                             explosions.push({ x: enemy.x, y: enemy.y, frame: 0 });
                             const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
-                            newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
+                            newExplosionSound.play().catch(e => console.error("Failed to play explosion sound:", e));
                         }
                     });
                 });
@@ -338,14 +348,12 @@
                     return;
                 }
 
-                console.log("Drawing UI, gameState:", gameState);
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 // Рендеринг фону з перевіркою стану зображення
                 if (backImg && backImg.complete && backImg.naturalHeight > 0) {
                     ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
                 } else {
-                    console.warn("Background image not loaded or broken, using black background");
                     ctx.fillStyle = '#000';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                 }
@@ -386,7 +394,6 @@
                     if (pussImg && pussImg.complete && pussImg.naturalHeight > 0) {
                         ctx.drawImage(pussImg, canvas.width / 2 - 275, canvas.height / 2 - 179.5, 550, 359);
                     } else {
-                        console.warn("Puss image not loaded or broken, using fallback");
                         ctx.fillStyle = '#fff';
                         ctx.fillRect(canvas.width / 2 - 275, canvas.height / 2 - 179.5, 550, 359);
                     }
@@ -462,7 +469,6 @@
             }
 
             function gameLoop() {
-                console.log("Running game loop, gameState:", gameState);
                 if (gameState === 'playing' && !paused) {
                     update();
                 }
@@ -472,7 +478,6 @@
 
             function startGame() {
                 if (gameState === 'menu' || gameState === 'gameover') {
-                    console.log("Starting game...");
                     gameState = 'playing';
                     score = 0;
                     lives = 3;
@@ -485,7 +490,6 @@
             }
 
             document.addEventListener('keydown', (e) => {
-                console.log("Key pressed:", e.key, "gameState:", gameState);
                 if (gameState === 'menu') {
                     if (e.key === 'Enter' || e.key === ' ') startGame();
                     if (e.key === 'l' || e.key === 'L') gameState = 'leaderboard';
@@ -507,7 +511,7 @@
                     if (e.key === ' ') {
                         bullets.push({ x: player.x + player.width / 2 - 2.5, y: player.y });
                         const newShootSound = new Audio('shoot.wav');
-                        newShootSound.play().catch(e => console.warn("Failed to play shoot sound:", e));
+                        newShootSound.play().catch(e => console.error("Failed to play shoot sound:", e));
                     }
                     if (e.key === 'p') paused = !paused;
                 }
@@ -518,7 +522,6 @@
             });
 
             canvas.addEventListener('click', () => {
-                console.log("Canvas clicked, gameState:", gameState);
                 if (gameState === 'menu' || gameState === 'gameover') {
                     startGame();
                 } else if (gameState === 'leaderboard') {
@@ -539,14 +542,21 @@
             const totalImages = 6;
             function imageLoaded() {
                 imagesLoaded++;
-                console.log(`Loaded image ${imagesLoaded}/${totalImages}`);
-                if (imagesLoaded === totalImages) gameLoop();
+                if (imagesLoaded === totalImages) {
+                    loadingScreen.style.display = 'none'; // Ховаємо Loading... після завантаження всіх зображень
+                    gameLoop();
+                }
             }
 
             function handleImageError(img, name) {
                 console.error(`Error loading ${name}`);
                 img.onerror = null; // Щоб уникнути повторних помилок
                 img.complete = false; // Позначаємо, що зображення не завантажилося
+                imagesLoaded++; // Лічимо "зламане" зображення як завантажене для прогресу
+                if (imagesLoaded === totalImages) {
+                    loadingScreen.style.display = 'none'; // Ховаємо Loading... навіть якщо є помилки
+                    gameLoop();
+                }
                 return false; // Позначає, що зображення не завантажилося
             }
 
@@ -564,10 +574,10 @@
             backImg.onload = imageLoaded;
             backImg.onerror = () => handleImageError(backImg, "back.png");
 
-            // Якщо зображення не завантажилися, запускаємо гру з базовим рендерингом
+            // Якщо зображення не завантажилися, запускаємо гру з базовим рендерингом і ховаємо Loading...
             setTimeout(() => {
                 if (imagesLoaded < totalImages) {
-                    console.warn("Not all images loaded, starting game with fallback rendering");
+                    loadingScreen.style.display = 'none'; // Ховаємо Loading... після таймауту
                     gameLoop();
                 }
             }, 5000); // Чекаємо 5 секунд перед запуском із запасним рендерингом

@@ -101,7 +101,7 @@
         window.orderBy = orderBy;
         window.limit = limit;
         window.getDocs = getDocs;
-        window.where = where; // Додано для фільтрації
+        window.where = where;
     </script>
 
     <script>
@@ -114,15 +114,15 @@
         let gameLoopRequestId = null;
 
         const playerImg = new Image();
-        playerImg.src = 'player.png';
+        playerImg.src = 'images/player.png'; // Оновлено шлях для підкаталогу images
         const enemyImgs = [new Image(), new Image(), new Image()];
-        enemyImgs[0].src = 'enemy1.png';
-        enemyImgs[1].src = 'enemy2.png';
-        enemyImgs[2].src = 'enemy3.png';
+        enemyImgs[0].src = 'images/enemy1.png';
+        enemyImgs[1].src = 'images/enemy2.png';
+        enemyImgs[2].src = 'images/enemy3.png';
         const pussImg = new Image();
-        pussImg.src = 'puss.png';
+        pussImg.src = 'images/puss.png';
         const backImg = new Image();
-        backImg.src = 'back.png';
+        backImg.src = 'images/back.png';
 
         const player = { x: 800 / 2 - 25, y: 600 - 60, width: 50, height: 50, speed: 5, dx: 0, image: playerImg };
         const bullets = [];
@@ -143,18 +143,22 @@
         const explosionSound = new Audio('explosion.wav');
 
         document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM loaded, initializing game...");
             canvas = document.getElementById('gameCanvas');
+            if (!canvas) console.error("Canvas element not found!");
             ctx = canvas.getContext('2d');
+            if (!ctx) console.error("Canvas context not initialized!");
             leaderboardOverlay = document.getElementById('leaderboardOverlay');
             leaderboardList = document.getElementById('leaderboardList');
 
             async function saveScore() {
                 if (playerName.trim() !== '') {
                     try {
+                        console.log("Saving score for:", playerName, score);
                         await window.addDoc(window.collection(window.db, 'leaderboard'), {
                             name: playerName.trim(),
                             score: score,
-                            gamepuss: "SpInv", // Додаємо ідентифікатор гри
+                            gamepuss: "SpInv",
                             timestamp: new Date().toISOString()
                         });
                         gameState = 'leaderboard';
@@ -166,14 +170,16 @@
 
             async function getLeaderboard() {
                 try {
+                    console.log("Fetching leaderboard...");
                     const q = window.query(
                         window.collection(window.db, 'leaderboard'),
-                        window.where('gamepuss', '==', 'SpInv'), // Фільтруємо тільки Space Invaders
+                        window.where('gamepuss', '==', 'SpInv'),
                         window.orderBy('score', 'desc'),
                         window.limit(10)
                     );
                     const querySnapshot = await window.getDocs(q);
                     const data = querySnapshot.docs.map(doc => doc.data());
+                    console.log("Leaderboard data:", data);
                     return data;
                 } catch (error) {
                     console.error("Error loading leaderboard:", error);
@@ -191,15 +197,41 @@
                 }
             }
 
-            function drawPlayer() { ctx.drawImage(player.image, player.x, player.y, player.width, player.height); }
+            function drawPlayer() {
+                if (player.image && player.image.complete && player.image.naturalHeight > 0) {
+                    ctx.drawImage(player.image, player.x, player.y, player.width, player.height);
+                } else {
+                    console.warn("Player image not loaded or broken, using fallback");
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(player.x, player.y, player.width, player.height);
+                }
+            }
+
             function drawBullets() {
                 ctx.fillStyle = '#ff0';
                 bullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, 5, 10));
                 ctx.fillStyle = '#f0f';
                 enemyBullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, 5, 10));
             }
-            function drawEnemies() { enemies.forEach(enemy => { if (enemy.alive) ctx.drawImage(enemy.image, enemy.x, enemy.y, enemy.width, enemy.height); }); }
-            function drawLinpuss() { ctx.fillStyle = '#fff'; ctx.font = `${linpuss.fontSize}px monospace`; ctx.fillText(linpuss.text, linpuss.x, linpuss.y); }
+
+            function drawEnemies() {
+                enemies.forEach(enemy => {
+                    if (enemy.alive && enemy.image && enemy.image.complete && enemy.image.naturalHeight > 0) {
+                        ctx.drawImage(enemy.image, enemy.x, enemy.y, enemy.width, enemy.height);
+                    } else {
+                        console.warn("Enemy image not loaded or broken, using fallback");
+                        ctx.fillStyle = '#f00';
+                        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    }
+                });
+            }
+
+            function drawLinpuss() {
+                ctx.fillStyle = '#fff';
+                ctx.font = `${linpuss.fontSize}px monospace`;
+                ctx.fillText(linpuss.text, linpuss.x, linpuss.y);
+            }
+
             function drawExplosions() {
                 explosions.forEach((exp, index) => {
                     ctx.fillStyle = `rgba(255, 165, 0, ${1 - exp.frame / 10})`;
@@ -208,6 +240,7 @@
                     if (exp.frame > 10) explosions.splice(index, 1);
                 });
             }
+
             function enemyShoot() {
                 if (Math.random() < 0.01) {
                     const aliveEnemies = enemies.filter(e => e.alive);
@@ -232,7 +265,7 @@
                             bullets.splice(bIndex, 1);
                             enemyBullets.splice(eIndex, 1);
                             explosions.push({ x: eBullet.x, y: eBullet.y, frame: 0 });
-                            const newExplosionSound = new Audio('explosion.wav');
+                            const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
                             newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
                             score += 5;
                             return;
@@ -247,7 +280,7 @@
                         lives--;
                         enemyBullets.splice(index, 1);
                         explosions.push({ x: player.x, y: player.y, frame: 0 });
-                        const newExplosionSound = new Audio('explosion.wav');
+                        const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
                         newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
                     }
                     if (bullet.x > linpuss.x && bullet.x < linpuss.x + linpuss.text.length * linpuss.charWidth && bullet.y > linpuss.y - linpuss.fontSize && bullet.y < linpuss.y) {
@@ -256,7 +289,7 @@
                             linpuss.text = linpuss.text.slice(0, hitIndex) + ' ' + linpuss.text.slice(hitIndex + 1);
                             enemyBullets.splice(index, 1);
                             explosions.push({ x: bullet.x, y: bullet.y, frame: 0 });
-                            const newExplosionSound = new Audio('explosion.wav');
+                            const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
                             newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
                         }
                     }
@@ -281,7 +314,7 @@
                             bullets.splice(bIndex, 1);
                             score += 10;
                             explosions.push({ x: enemy.x, y: enemy.y, frame: 0 });
-                            const newExplosionSound = new Audio('explosion.wav');
+                            const newExplosionSound = new Audio('shoot.wav'); // Використано shoot.wav як приклад, заміни на explosion.wav, якщо потрібно
                             newExplosionSound.play().catch(e => console.warn("Failed to play explosion sound:", e));
                         }
                     });
@@ -305,14 +338,28 @@
                     return;
                 }
 
+                console.log("Drawing UI, gameState:", gameState);
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+
+                // Рендеринг фону з перевіркою стану зображення
+                if (backImg && backImg.complete && backImg.naturalHeight > 0) {
+                    ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+                } else {
+                    console.warn("Background image not loaded or broken, using black background");
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
 
                 if (gameState === 'playing') {
                     ctx.resetTransform();
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+
+                    if (backImg && backImg.complete && backImg.naturalHeight > 0) {
+                        ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
 
                     ctx.fillStyle = '#fff';
                     ctx.font = '20px Arial';
@@ -328,9 +375,22 @@
                 } else if (gameState === 'menu') {
                     ctx.resetTransform();
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(pussImg, canvas.width / 2 - 275, canvas.height / 2 - 179.5, 550, 359);
+
+                    if (backImg && backImg.complete && backImg.naturalHeight > 0) {
+                        ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
+
+                    if (pussImg && pussImg.complete && pussImg.naturalHeight > 0) {
+                        ctx.drawImage(pussImg, canvas.width / 2 - 275, canvas.height / 2 - 179.5, 550, 359);
+                    } else {
+                        console.warn("Puss image not loaded or broken, using fallback");
+                        ctx.fillStyle = '#fff';
+                        ctx.fillRect(canvas.width / 2 - 275, canvas.height / 2 - 179.5, 550, 359);
+                    }
+
                     ctx.fillStyle = '#fff';
                     ctx.font = '35px Silkscreen, serif';
                     ctx.textAlign = 'center';
@@ -358,7 +418,12 @@
                     ctx.fillText(playerName, canvas.width / 2, canvas.height / 2 + 40);
                     leaderboardOverlay.style.display = 'none';
                 } else if (gameState === 'leaderboard') {
-                    ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+                    if (backImg && backImg.complete && backImg.naturalHeight > 0) {
+                        ctx.drawImage(backImg, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     leaderboardOverlay.style.display = 'block';
 
@@ -397,6 +462,7 @@
             }
 
             function gameLoop() {
+                console.log("Running game loop, gameState:", gameState);
                 if (gameState === 'playing' && !paused) {
                     update();
                 }
@@ -406,6 +472,7 @@
 
             function startGame() {
                 if (gameState === 'menu' || gameState === 'gameover') {
+                    console.log("Starting game...");
                     gameState = 'playing';
                     score = 0;
                     lives = 3;
@@ -418,6 +485,7 @@
             }
 
             document.addEventListener('keydown', (e) => {
+                console.log("Key pressed:", e.key, "gameState:", gameState);
                 if (gameState === 'menu') {
                     if (e.key === 'Enter' || e.key === ' ') startGame();
                     if (e.key === 'l' || e.key === 'L') gameState = 'leaderboard';
@@ -450,6 +518,7 @@
             });
 
             canvas.addEventListener('click', () => {
+                console.log("Canvas clicked, gameState:", gameState);
                 if (gameState === 'menu' || gameState === 'gameover') {
                     startGame();
                 } else if (gameState === 'leaderboard') {
@@ -470,25 +539,40 @@
             const totalImages = 6;
             function imageLoaded() {
                 imagesLoaded++;
+                console.log(`Loaded image ${imagesLoaded}/${totalImages}`);
                 if (imagesLoaded === totalImages) gameLoop();
             }
 
-            playerImg.onload = imageLoaded;
-            enemyImgs[0].onload = imageLoaded;
-            enemyImgs[1].onload = imageLoaded;
-            enemyImgs[2].onload = imageLoaded;
-            pussImg.onload = imageLoaded;
-            backImg.onload = imageLoaded;
+            function handleImageError(img, name) {
+                console.error(`Error loading ${name}`);
+                img.onerror = null; // Щоб уникнути повторних помилок
+                img.complete = false; // Позначаємо, що зображення не завантажилося
+                return false; // Позначає, що зображення не завантажилося
+            }
 
-            playerImg.onerror = () => console.error("Error loading player.png");
-            enemyImgs[0].onerror = () => console.error("Error loading enemy1.png");
-            enemyImgs[1].onerror = () => console.error("Error loading enemy2.png");
-            enemyImgs[2].onerror = () => console.error("Error loading enemy3.png");
-            pussImg.onerror = () => console.error("Error loading puss.png");
-            backImg.onerror = () => console.error("Error loading back.png");
+            // Завантаження зображень із додатковою перевіркою
+            playerImg.onload = imageLoaded;
+            playerImg.onerror = () => handleImageError(playerImg, "player.png");
+            enemyImgs[0].onload = imageLoaded;
+            enemyImgs[0].onerror = () => handleImageError(enemyImgs[0], "enemy1.png");
+            enemyImgs[1].onload = imageLoaded;
+            enemyImgs[1].onerror = () => handleImageError(enemyImgs[1], "enemy2.png");
+            enemyImgs[2].onload = imageLoaded;
+            enemyImgs[2].onerror = () => handleImageError(enemyImgs[2], "enemy3.png");
+            pussImg.onload = imageLoaded;
+            pussImg.onerror = () => handleImageError(pussImg, "puss.png");
+            backImg.onload = imageLoaded;
+            backImg.onerror = () => handleImageError(backImg, "back.png");
+
+            // Якщо зображення не завантажилися, запускаємо гру з базовим рендерингом
+            setTimeout(() => {
+                if (imagesLoaded < totalImages) {
+                    console.warn("Not all images loaded, starting game with fallback rendering");
+                    gameLoop();
+                }
+            }, 5000); // Чекаємо 5 секунд перед запуском із запасним рендерингом
         });
     </script>
 </body>
-<!-- K7stia -->
 
 </html>
